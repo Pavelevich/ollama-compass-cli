@@ -36,10 +36,10 @@
   "homepage": "https://ollamalyzer.com",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ollamalyzer/ollama-compass-cli.git"
+    "url": "https://github.com/Pavelevich/ollama-compass-cli"
   },
   "bugs": {
-    "url": "https://github.com/ollamalyzer/ollama-compass-cli/issues"
+    "url": "https://github.com/Pavelevich/ollama-compass-cli/issues"
   },
   "license": "MIT",
   "dependencies": {
