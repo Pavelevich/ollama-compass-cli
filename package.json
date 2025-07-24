@@ -1,6 +1,6 @@
 {
   "name": "ollama-compass-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Local hardware detection and Ollama monitoring CLI for Ollama Model Compass - Get accurate system specs and real-time monitoring",
   "main": "src/index.js",
   "bin": {

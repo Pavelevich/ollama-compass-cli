@@ -59,15 +59,24 @@ class HardwareDetector {
         usagePercentage: Math.round((memory.used / memory.total) * 100)
       };
 
-      // Process GPU information
-      const gpuInfo = graphics.controllers.map(gpu => ({
+      // Process GPU information - prioritize dedicated GPUs
+      const allGPUs = graphics.controllers.map(gpu => ({
         brand: this.extractGPUBrand(gpu.vendor || gpu.model),
         model: gpu.model || 'Unknown GPU',
         vramGB: gpu.vram ? Math.round(gpu.vram / 1024) : 0,
         type: this.determineGPUType(gpu.model, gpu.vendor),
         driver: gpu.driverVersion || 'Unknown',
-        temperature: gpu.temperatureGpu || 0
+        temperature: gpu.temperatureGpu || 0,
+        vendor: gpu.vendor,
+        rawModel: gpu.model
       }));
+      
+      // Sort GPUs: dedicated first, then by VRAM
+      const gpuInfo = allGPUs.sort((a, b) => {
+        if (a.type === 'dedicated' && b.type !== 'dedicated') return -1;
+        if (b.type === 'dedicated' && a.type !== 'dedicated') return 1;
+        return b.vramGB - a.vramGB;
+      });
 
       // Process Storage information
       const storageInfo = diskLayout.map(disk => ({
@@ -116,7 +125,7 @@ class HardwareDetector {
           },
           storage: {
             totalSpaceGB: storageInfo.reduce((sum, disk) => sum + disk.sizeGB, 0),
-            availableSpaceGB: 0, // We'll need to get this separately
+            availableSpaceGB: await this.getAvailableStorage(),
             storageType: storageInfo[0]?.type || 'SSD',
             drives: storageInfo
           },
@@ -152,9 +161,9 @@ class HardwareDetector {
   extractGPUBrand(vendor) {
     if (!vendor) return 'Unknown';
     const vendorLower = vendor.toLowerCase();
-    if (vendorLower.includes('nvidia')) return 'NVIDIA';
-    if (vendorLower.includes('amd') || vendorLower.includes('ati')) return 'AMD';
-    if (vendorLower.includes('intel')) return 'Intel';
+    if (vendorLower.includes('nvidia') || vendorLower.includes('geforce')) return 'NVIDIA';
+    if (vendorLower.includes('amd') || vendorLower.includes('ati') || vendorLower.includes('radeon')) return 'AMD';
+    if (vendorLower.includes('intel') && !vendorLower.includes('nvidia')) return 'Intel';
     if (vendorLower.includes('apple')) return 'Apple';
     return vendor;
   }
@@ -164,11 +173,17 @@ class HardwareDetector {
     const modelLower = model.toLowerCase();
     const vendorLower = (vendor || '').toLowerCase();
     
-    // Dedicated GPU indicators
-    if (modelLower.includes('geforce') || modelLower.includes('rtx') || modelLower.includes('gtx')) return 'dedicated';
-    if (modelLower.includes('radeon') && !modelLower.includes('graphics')) return 'dedicated';
-    if (modelLower.includes('arc')) return 'dedicated';
+    // NVIDIA dedicated GPUs
+    if (modelLower.includes('geforce') || modelLower.includes('rtx') || modelLower.includes('gtx') || modelLower.includes('quadro')) return 'dedicated';
     if (vendorLower.includes('nvidia') && !modelLower.includes('integrated')) return 'dedicated';
+    
+    // AMD dedicated GPUs
+    if (modelLower.includes('radeon') && !modelLower.includes('graphics')) return 'dedicated';
+    if (modelLower.includes('rx ') || modelLower.includes('vega')) return 'dedicated';
+    if (vendorLower.includes('amd') && !modelLower.includes('integrated')) return 'dedicated';
+    
+    // Intel dedicated GPUs
+    if (modelLower.includes('arc')) return 'dedicated';
     
     // Apple Silicon
     if (modelLower.includes('apple') || modelLower.includes('m1') || modelLower.includes('m2') || modelLower.includes('m3')) {
@@ -226,6 +241,20 @@ class HardwareDetector {
     if (overallScore >= 60) return 'MEDIUM';
     if (overallScore >= 40) return 'LOW';
     return 'VERY_LOW';
+  }
+
+  async getAvailableStorage() {
+    try {
+      const fsSize = await si.fsSize();
+      if (fsSize && fsSize.length > 0) {
+        const totalAvailable = fsSize.reduce((sum, fs) => sum + fs.available, 0);
+        return Math.round(totalAvailable / (1024 * 1024 * 1024));
+      }
+      return 0;
+    } catch (error) {
+      console.error('Error getting storage info:', error);
+      return 0;
+    }
   }
 
   async getRealtimeStats() {
