@@ -9,8 +9,10 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "prepublishOnly": "echo \"Ready to publish ollama-compass-cli\""
+    "test": "node src/cli.js analyze --json > /dev/null && echo \"Tests passed\"",
+    "prepublishOnly": "npm run test",
+    "publish-helper": "./scripts/publish.sh",
+    "postinstall": "echo \"\\n🦙 Ollama Compass CLI installed successfully!\\n📖 Run 'ollama-compass --help' to get started\\n🚀 Visit https://ollamalyzer.com for more info\\n\""
   },
   "keywords": [
     "ollama",
