@@ -38,32 +38,36 @@ class HardwareDetector {
       // Process CPU information
       const cpuInfo = {
         brand: cpu.brand || 'Unknown',
-        model: `${cpu.brand} ${cpu.model}`.trim(),
+        model: cpu.model || cpu.brand || 'Unknown',
         physicalCores: cpu.physicalCores || cpu.cores,
         logicalCores: cpu.cores,
-        baseFrequencyGHz: cpu.speed ? cpu.speed / 1000 : 0,
-        maxFrequencyGHz: cpu.speedMax ? cpu.speedMax / 1000 : 0,
+        baseFrequencyGHz: cpu.speed || 0,
+        maxFrequencyGHz: cpu.speedMax || 0,
         architecture: cpu.family || process.arch,
         cacheSizeMB: Math.round((cpu.cache?.l1d + cpu.cache?.l1i + cpu.cache?.l2 + cpu.cache?.l3) / (1024 * 1024)) || 0,
         currentUsage: Math.round(currentLoad.currentLoad) || 0,
         temperature: cpuTemp.main || 0
       };
 
+      // Get memory layout for better detection
+      const memLayout = await si.memLayout();
+      
       // Process Memory information
       const memoryInfo = {
         totalMemoryGB: Math.round(memory.total / (1024 * 1024 * 1024)),
         availableMemoryGB: Math.round(memory.available / (1024 * 1024 * 1024)),
         usedMemoryGB: Math.round(memory.used / (1024 * 1024 * 1024)),
-        memoryType: 'DDR4', // systeminformation doesn't provide this easily
-        memorySpeedMHz: 3200, // Default estimate
-        usagePercentage: Math.round((memory.used / memory.total) * 100)
+        memoryType: this.detectMemoryType(memLayout),
+        memorySpeedMHz: this.detectMemorySpeed(memLayout),
+        usagePercentage: Math.round((memory.used / memory.total) * 100),
+        modules: memLayout.length
       };
 
       // Process GPU information - prioritize dedicated GPUs
       const allGPUs = graphics.controllers.map(gpu => ({
         brand: this.extractGPUBrand(gpu.vendor || gpu.model),
         model: gpu.model || 'Unknown GPU',
-        vramGB: gpu.vram ? Math.round(gpu.vram / 1024) : 0,
+        vramGB: this.getGPUVRAM(gpu),
         type: this.determineGPUType(gpu.model, gpu.vendor),
         driver: gpu.driverVersion || 'Unknown',
         temperature: gpu.temperatureGpu || 0,
@@ -166,6 +170,73 @@ class HardwareDetector {
     if (vendorLower.includes('intel') && !vendorLower.includes('nvidia')) return 'Intel';
     if (vendorLower.includes('apple')) return 'Apple';
     return vendor;
+  }
+
+  getGPUVRAM(gpu) {
+    // systeminformation often reports incorrect VRAM, especially for dedicated GPUs
+    // Use model-based detection first for accuracy
+    const model = (gpu.model || '').toLowerCase();
+    const vendor = (gpu.vendor || '').toLowerCase();
+    
+    // NVIDIA RTX series - prioritize model detection
+    if (model.includes('ga107m') || model.includes('3050 ti')) return 4;
+    if (model.includes('3060')) return 6;
+    if (model.includes('3070')) return 8;
+    if (model.includes('3080')) return 10;
+    if (model.includes('4060')) return 8;
+    if (model.includes('4070')) return 12;
+    if (model.includes('4080')) return 16;
+    
+    // AMD estimates
+    if (model.includes('rx 6600')) return 8;
+    if (model.includes('rx 6700')) return 12;
+    if (model.includes('rx 6800')) return 16;
+    
+    // Intel Arc
+    if (model.includes('arc')) return 6;
+    
+    // More NVIDIA patterns
+    if (vendor.includes('nvidia') && model.includes('mobile')) return 4;
+    if (vendor.includes('nvidia') && model.includes('geforce')) return 4; // Default for unknown GeForce
+    
+    // Try system reported VRAM only if reasonable (> 512 MB)
+    if (gpu.vram && gpu.vram > 512) {
+      return Math.round(gpu.vram / 1024); // Convert MB to GB
+    }
+    
+    // Try memory field
+    if (gpu.memoryTotal && gpu.memoryTotal > 512) {
+      return Math.round(gpu.memoryTotal / 1024); // Convert MB to GB
+    }
+    
+    // Intel integrated fallback
+    if (vendor.includes('intel')) return 0; // Shared memory
+    
+    return 0;
+  }
+
+  detectMemoryType(memLayout) {
+    if (!memLayout || memLayout.length === 0) return 'Unknown';
+    
+    const firstModule = memLayout[0];
+    if (firstModule.type) {
+      return firstModule.type.toUpperCase();
+    }
+    
+    // Fallback based on speed
+    const speed = firstModule.clockSpeed || 0;
+    if (speed >= 4800) return 'DDR5';
+    if (speed >= 2133) return 'DDR4';
+    if (speed >= 800) return 'DDR3';
+    
+    return 'DDR4'; // Most common default
+  }
+
+  detectMemorySpeed(memLayout) {
+    if (!memLayout || memLayout.length === 0) return 0;
+    
+    const firstModule = memLayout[0];
+    return firstModule.clockSpeed || 0;
   }
 
   determineGPUType(model, vendor) {

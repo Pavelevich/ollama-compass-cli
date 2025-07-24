@@ -20,7 +20,7 @@ ${chalk.cyan('╚═════════════════════
 program
   .name('ollama-compass')
   .description('Local hardware detection and Ollama monitoring for Ollama Model Compass')
-  .version('1.0.0');
+  .version('1.0.2');
 
 // Start server command
 program
@@ -202,48 +202,97 @@ program
 // Display functions
 function displayHardwareAnalysis(analysis) {
   console.log(chalk.yellow('\n🖥️  Hardware Analysis Results:'));
-  console.log(chalk.gray('═'.repeat(60)));
+  console.log(chalk.gray('═'.repeat(70)));
   
   const { hardwareSpecs, performanceScores, hardwareTier } = analysis;
+  
+  // System Information
+  console.log(chalk.blue('\n🖥️  System:'));
+  console.log(`   Manufacturer: ${chalk.white(hardwareSpecs.system.manufacturer)}`);
+  console.log(`   Model: ${chalk.white(hardwareSpecs.system.model)}`);
+  console.log(`   OS: ${chalk.white(hardwareSpecs.system.os + ' ' + hardwareSpecs.system.osVersion)}`);
+  console.log(`   Hostname: ${chalk.white(hardwareSpecs.system.hostname)}`);
+  console.log(`   Uptime: ${chalk.white(hardwareSpecs.system.uptime + ' hours')}`);
   
   // CPU Info
   console.log(chalk.cyan('\n💻 CPU:'));
   console.log(`   Model: ${chalk.white(hardwareSpecs.cpu.model)}`);
+  console.log(`   Brand: ${chalk.white(hardwareSpecs.cpu.brand)}`);
   console.log(`   Cores: ${chalk.white(hardwareSpecs.cpu.physicalCores)} physical, ${chalk.white(hardwareSpecs.cpu.logicalCores)} logical`);
-  console.log(`   Frequency: ${chalk.white(hardwareSpecs.cpu.baseFrequencyGHz + ' GHz')}`);
-  console.log(`   Usage: ${chalk.white(hardwareSpecs.cpu.currentUsage + '%')}`);
+  console.log(`   Base Frequency: ${chalk.white(hardwareSpecs.cpu.baseFrequencyGHz.toFixed(2) + ' GHz')}`);
+  if (hardwareSpecs.cpu.maxFrequencyGHz > 0) {
+    console.log(`   Max Frequency: ${chalk.white(hardwareSpecs.cpu.maxFrequencyGHz.toFixed(2) + ' GHz')}`);
+  }
+  console.log(`   Cache: ${chalk.white(hardwareSpecs.cpu.cacheSizeMB + ' MB')}`);
+  console.log(`   Architecture: ${chalk.white(hardwareSpecs.cpu.architecture)}`);
+  console.log(`   Current Usage: ${chalk.white(hardwareSpecs.cpu.currentUsage + '%')}`);
   if (hardwareSpecs.cpu.temperature > 0) {
     console.log(`   Temperature: ${chalk.white(hardwareSpecs.cpu.temperature + '°C')}`);
   }
   
   // Memory Info
-  console.log(chalk.cyan('\n🧠 Memory:'));
+  console.log(chalk.green('\n🧠 Memory:'));
   console.log(`   Total: ${chalk.white(hardwareSpecs.memory.totalMemoryGB + ' GB')}`);
   console.log(`   Available: ${chalk.white(hardwareSpecs.memory.availableMemoryGB + ' GB')}`);
+  console.log(`   Used: ${chalk.white(hardwareSpecs.memory.usedMemoryGB + ' GB')}`);
+  console.log(`   Type: ${chalk.white(hardwareSpecs.memory.memoryType)}`);
+  console.log(`   Speed: ${chalk.white(hardwareSpecs.memory.memorySpeedMHz + ' MHz')}`);
+  if (hardwareSpecs.memory.modules) {
+    console.log(`   Modules: ${chalk.white(hardwareSpecs.memory.modules)}`);
+  }
   console.log(`   Usage: ${chalk.white(hardwareSpecs.memory.usagePercentage + '%')}`);
   
   // GPU Info
-  console.log(chalk.cyan('\n🎮 Graphics:'));
+  console.log(chalk.magenta('\n🎮 Graphics:'));
   console.log(`   Model: ${chalk.white(hardwareSpecs.gpu.model)}`);
   console.log(`   Brand: ${chalk.white(hardwareSpecs.gpu.brand)}`);
   console.log(`   Type: ${chalk.white(hardwareSpecs.gpu.type)}`);
-  if (hardwareSpecs.gpu.vramGB > 0) {
-    console.log(`   VRAM: ${chalk.white(hardwareSpecs.gpu.vramGB + ' GB')}`);
+  console.log(`   VRAM: ${chalk.white(hardwareSpecs.gpu.vramGB + ' GB')}`);
+  if (hardwareSpecs.gpu.driver && hardwareSpecs.gpu.driver !== 'Unknown') {
+    console.log(`   Driver: ${chalk.white(hardwareSpecs.gpu.driver)}`);
+  }
+  if (hardwareSpecs.gpu.temperature > 0) {
+    console.log(`   Temperature: ${chalk.white(hardwareSpecs.gpu.temperature + '°C')}`);
   }
   
   // Storage Info
-  console.log(chalk.cyan('\n💾 Storage:'));
-  console.log(`   Type: ${chalk.white(hardwareSpecs.storage.storageType)}`);
-  console.log(`   Total: ${chalk.white(hardwareSpecs.storage.totalSpaceGB + ' GB')}`);
+  console.log(chalk.yellow('\n💾 Storage:'));
+  console.log(`   Total Space: ${chalk.white(hardwareSpecs.storage.totalSpaceGB + ' GB')}`);
+  console.log(`   Available Space: ${chalk.white(hardwareSpecs.storage.availableSpaceGB + ' GB')}`);
+  console.log(`   Primary Type: ${chalk.white(hardwareSpecs.storage.storageType)}`);
+  if (hardwareSpecs.storage.drives && hardwareSpecs.storage.drives.length > 0) {
+    console.log('   Drives:');
+    hardwareSpecs.storage.drives.forEach((drive, index) => {
+      console.log(`     ${index + 1}. ${chalk.white(drive.model)} (${chalk.gray(drive.sizeGB + ' GB ' + drive.type + ', ' + drive.interface)})`);
+    });
+  }
+  
+  // Network Information
+  if (analysis.networkInterfaces && analysis.networkInterfaces.length > 0) {
+    console.log(chalk.gray('\n🌐 Network:'));
+    analysis.networkInterfaces.forEach(iface => {
+      const speed = iface.speed ? ` (${iface.speed} Mbps)` : '';
+      console.log(`   ${chalk.white(iface.name)}: ${chalk.gray(iface.type + speed)}`);
+    });
+  }
+  
+  // Battery Information
+  if (analysis.battery && analysis.battery.hasBattery) {
+    console.log(chalk.green('\n🔋 Battery:'));
+    console.log(`   Level: ${chalk.white(analysis.battery.percent + '%')}`);
+    console.log(`   Status: ${chalk.white(analysis.battery.isCharging ? 'Charging' : 'Not Charging')}`);
+  }
   
   // Performance Scores
-  console.log(chalk.cyan('\n📊 Performance Scores:'));
+  console.log(chalk.blue('\n📊 Performance Scores:'));
   console.log(`   Overall: ${chalk.white(performanceScores.overallScore + '/100')} (${chalk.white(hardwareTier)})`);
   console.log(`   CPU: ${chalk.white(performanceScores.cpuScore + '/100')}`);
   console.log(`   Memory: ${chalk.white(performanceScores.memoryScore + '/100')}`);
   console.log(`   GPU: ${chalk.white(performanceScores.gpuScore + '/100')}`);
+  console.log(`   Storage: ${chalk.white(performanceScores.storageScore + '/100')}`);
   
   console.log(chalk.green(`\n✅ Hardware fingerprint: ${analysis.hardwareFingerprint}`));
+  console.log(chalk.gray(`🕒 Analysis completed at: ${new Date(analysis.analysisTimestamp).toLocaleString()}`));
 }
 
 function displayOllamaStatus(status) {
